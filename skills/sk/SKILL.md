@@ -54,7 +54,7 @@ Load it natively:
 node <sk> link <target>
 ```
 
-It copies the skill into Claude Code's skills folder, where it shows up within seconds, and prints its name. Call the Skill tool with that name and follow the skill. Once it has launched, take it out of the listing:
+It copies the skill into Claude Code's skills folder as `<session>-<name>`, where it shows up within seconds, and prints that name. Call the Skill tool with that name, not the skill's own, and follow the skill. Once it has launched, take it out of the listing:
 
 ```bash
 node <sk> unlink <name>

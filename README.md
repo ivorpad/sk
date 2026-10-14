@@ -23,7 +23,7 @@ To also move your other skills into the library, or on any other agent, tell you
 Follow https://raw.githubusercontent.com/ivorpad/sk/main/INSTALL.md
 ```
 
-It installs `sk`, moves your other skills into one library folder after showing you the list and backing them up, and checks the result. [INSTALL.md](INSTALL.md) has the steps.
+It installs `sk` only where it's missing, moves your other skills into one library folder after showing you the list and backing them up, and checks the result. [INSTALL.md](INSTALL.md) has the steps.
 
 By hand: `npx skills add ivorpad/sk -g`, then move your skills into `~/.skills/<name>/SKILL.md` (or the folder `SKILLS_HOME` points at). With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
 
@@ -49,7 +49,7 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | `find <words>` | scores each local skill's name and description against the words, then runs `npx skills find <words>` |
 | `use <name>` | `npx skills use <library>/<name>` |
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
-| `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills` without `disable-model-invocation`. Refuses to replace a skill it didn't make |
+| `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills/<session>-<name>` (the first 8 characters of the session id) without `disable-model-invocation`, so sessions loading the same skill don't share a folder. Refuses to replace a skill it didn't make |
 | `unlink <name>` | deletes the copy's `SKILL.md`, so it leaves the listing. Its other files stay at the paths the Skill tool gave it until the session ends |
 | `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), and `link` copies whose Claude Code session (`CLAUDE_PID`) has ended. The plugin's hooks run it with `--hook` |
 | `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |

@@ -202,7 +202,7 @@ function resolveDir(target, extra) {
 function link(target, extra) {
   if (!target) fail("link needs a skill name, owner/repo@skill, or a repo URL with --skill");
   const dir = resolveDir(target, extra);
-  const name = dir.split(/[\\/]/).pop();
+  const name = folderName(dir.split(/[\\/]/).pop());
   const path = join(claudeSkills, name);
   if (existsSync(path) && !isOurs(path)) {
     fail(`${path} already exists; not replacing it. Load that one, or use: node sk.mjs use ${target} --out`);
@@ -233,6 +233,14 @@ function modelInvocable(text) {
   const fm = /^---\r?\n[\s\S]*?\r?\n---/.exec(text)?.[0];
   if (!fm) return text;
   return fm.replace(/^disable-model-invocation:.*\r?\n/m, "") + text.slice(fm.length);
+}
+
+// <session>-<name>: two sessions loading the same skill get a folder each, so
+// one ending never removes files the other is using. The Skill tool takes this
+// folder name, and lists the skill's own name beside it.
+function folderName(skill) {
+  const session = (process.env.CLAUDE_CODE_SESSION_ID || "").slice(0, 8);
+  return session ? `${session}-${skill}` : skill;
 }
 
 // Marks a folder link made in claudeSkills, with the Claude Code process it was
@@ -276,8 +284,10 @@ function fetchedRoot(dir) {
 // Drop the skill from the listing once the Skill tool has loaded it. Only
 // SKILL.md goes: scripts/, references/ and the rest stay at the paths the skill
 // was given until the session ends and prune removes them.
-function unlink(name) {
-  if (!name) fail("unlink needs a skill name");
+function unlink(given) {
+  if (!given) fail("unlink needs a skill name");
+  // The name link printed, or the skill's own name in this session.
+  const name = isOurs(join(claudeSkills, given)) ? given : folderName(given);
   const path = join(claudeSkills, name);
   if (!isOurs(path)) fail(`${path} was not made by sk link; leaving it alone`);
   rmSync(join(path, "SKILL.md"), { force: true });

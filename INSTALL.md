@@ -3,7 +3,7 @@
 Instructions for an agent. Set up [sk](https://github.com/ivorpad/sk) so that it is the only skill the user's agents load, and every other skill loads on demand.
 
 1. Check `node --version` is 18 or later. Stop and tell the user if not.
-2. Install it globally. For Claude Code, as a plugin: `claude plugin marketplace add ivorpad/sk`, then `claude plugin install sk@sk`. For any other agent: `npx skills add ivorpad/sk -g -y`.
+2. Install sk where it's missing. For Claude Code, skip this if `claude plugin list` shows `sk@sk`; otherwise install the plugin: `claude plugin marketplace add ivorpad/sk`, then `claude plugin install sk@sk`. With the plugin in place, a `~/.claude/skills/sk` from an earlier `npx skills add` loads a second copy: tell the user and remove it once they agree. For any other agent, skip this if its skills folder already has sk; otherwise `npx skills add ivorpad/sk -g -y`.
 3. Use `~/.skills` as the skill library, unless SKILLS_HOME is already set; then use that. Create the folder if it's missing.
 4. Find every skill installed outside the library: each folder holding a SKILL.md directly under ~/.claude/skills, ~/.agents/skills, ~/.codex/skills, ~/.cursor/skills and ~/.copilot/skills, following symlinks. Skip sk itself. Skip anything managed elsewhere: plugin caches, ~/.codex/skills/.system, and ~/.claude/skills/synced (claude.ai sync). Skip skills committed inside project repositories.
 5. Show the user the list: name, where it is, and whether the library already has a skill of that name. Ask before moving anything.
