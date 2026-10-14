@@ -8,7 +8,16 @@ Every installed skill puts its description in the agent's context at the start o
 
 ## Install
 
-Tell your agent (Claude Code, Codex, or any agent with a shell):
+On Claude Code, as a plugin:
+
+```
+/plugin marketplace add ivorpad/sk
+/plugin install sk@sk
+```
+
+The plugin adds two hooks: `SessionEnd` removes the skill folders `sk` copied in for that session, and `SessionStart` removes any a crashed session left. If you installed `sk` with `npx skills add` before, delete `~/.claude/skills/sk`, or both load (`/sk` and `/sk:sk`).
+
+To also move your other skills into the library, or on any other agent, tell your agent:
 
 ```text
 Follow https://raw.githubusercontent.com/ivorpad/sk/main/INSTALL.md
@@ -40,19 +49,21 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | `find <words>` | scores each local skill's name and description against the words, then runs `npx skills find <words>` |
 | `use <name>` | `npx skills use <library>/<name>` |
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
-| `link <target>` | Claude Code only: the library folder, or the registry skill fetched into a temp folder with `skills add --copy`, linked into `~/.claude/skills` |
-| `unlink <name>` | removes that link, and only a link |
-| `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), keeps any a live link uses, removes dangling links |
+| `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills` without `disable-model-invocation`. Refuses to replace a skill it didn't make |
+| `unlink <name>` | deletes the copy's `SKILL.md`, so it leaves the listing. Its other files stay at the paths the Skill tool gave it until the session ends |
+| `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), and `link` copies whose Claude Code session (`CLAUDE_PID`) has ended. The plugin's hooks run it with `--hook` |
 | `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |
 | any `use` with `--out` | the same, saved whole to a temp file whose path it prints |
 
-You can run it yourself too: `node ~/.claude/skills/sk/scripts/sk.mjs find pdf`.
+You can run it yourself too: `node <sk folder>/scripts/sk.mjs find pdf`, where the folder is `~/.claude/skills/sk` after `npx skills add`, or `skills/sk` in the plugin's install folder.
 
 `skills use` copies the skill's `scripts/` and `references/` to a temp folder and says where, so relative paths in the skill still resolve.
 
 ## Things to know
 
-- On Claude Code, `sk` loads skills natively. It links the skill into `~/.claude/skills`, which Claude Code watches, calls the Skill tool, then removes the link. You see the usual `Skill(name)` launch and nothing stays listed. That the Skill tool accepts a skill linked mid-session is observed behavior (Claude Code 2.1.299), not documented. If it stops working, `sk` falls back to the text load.
+- On Claude Code, `sk` loads skills natively. It copies the skill into `~/.claude/skills`, which Claude Code watches, calls the Skill tool, then deletes the copy's `SKILL.md`. You see the usual `Skill(name)` launch and nothing stays listed, while `scripts/` and `references/` stay reachable for the session. That the Skill tool accepts a skill added mid-session is observed behavior (Claude Code 2.1.299), not documented. If it stops working, `sk` falls back to the text load.
+- As a plugin, the skill is `/sk:sk`, since Claude Code prefixes plugin skills with the plugin name. Asking in words ("use the pdf skill") works either way.
+- A session resumed after it ended has lost the copies its `SessionEnd` hook removed. Load the skill again.
 - Other agents (Codex and the rest) have no Skill tool, so the skill arrives as tool output. The instructions still land in context and the agent follows them.
 - A skill that hands off to another one ("call the Skill tool with X") can't reach X through the native loader, because X isn't installed. `sk` tells the agent to load X the same way.
 - Registry skills are other people's instructions. `sk` names the source repo before following one and asks before running any script it ships.

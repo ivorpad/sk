@@ -3,9 +3,9 @@
 //
 //   node sk.mjs find <words...>                 local library, then skills.sh
 //   node sk.mjs use <name | owner/repo@skill | url --skill <name>>   print the skill as a prompt
-//   node sk.mjs link <same targets>             Claude Code: put it in the skills folder for the Skill tool
-//   node sk.mjs unlink <name>                   remove a link that link made
-//   node sk.mjs prune [--hours N] [--dry-run]   delete temp folders from skills use / link / --out
+//   node sk.mjs link <same targets>             Claude Code: copy it into the skills folder for the Skill tool
+//   node sk.mjs unlink <name>                   take it out of the listing, keeping its other files for the session
+//   node sk.mjs prune [--hours N] [--dry-run] [--hook]   delete temp folders and copies whose session has ended
 //
 // Library: $SKILLS_HOME, else ~/.skills. One folder per skill: <library>/<name>/SKILL.md
 // Runner: --runner npx|pnpm|bun, else $SK_RUNNER, else npx.
@@ -13,21 +13,19 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
-  lstatSync,
-  readlinkSync,
   rmSync,
   statSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
-  symlinkSync,
-  unlinkSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 const args = process.argv.slice(2);
 let runner = process.env.SK_RUNNER || "npx";
@@ -196,46 +194,116 @@ function resolveDir(target, extra) {
   return join(root, found[0]);
 }
 
+// Claude Code: copy the skill into its skills folder, where the watcher lists it
+// for the Skill tool. A copy, not a symlink: the Skill tool hands the skill paths
+// under claudeSkills/<name>, and a copy keeps them working after unlink with
+// nothing to dangle. The copy's SKILL.md drops disable-model-invocation, since
+// sk only loads a skill the user asked for.
 function link(target, extra) {
   if (!target) fail("link needs a skill name, owner/repo@skill, or a repo URL with --skill");
   const dir = resolveDir(target, extra);
   const name = dir.split(/[\\/]/).pop();
   const path = join(claudeSkills, name);
-  if (existsSync(path) || isLink(path)) {
+  if (existsSync(path) && !isOurs(path)) {
     fail(`${path} already exists; not replacing it. Load that one, or use: node sk.mjs use ${target} --out`);
   }
   mkdirSync(claudeSkills, { recursive: true });
-  // A junction needs no admin rights on Windows; elsewhere the type is ignored.
-  symlinkSync(dir, path, "junction");
+  // Build beside it, then swap, so a failure leaves nothing half-copied in the listing.
+  const staged = mkdtempSync(join(claudeSkills, `.${name}.sk-`));
+  writeFileSync(join(staged, MARK), JSON.stringify(owner(dir)));
+  cpSync(dir, staged, { recursive: true, dereference: true });
+  const skillFile = join(staged, "SKILL.md");
+  const text = readFileSync(skillFile, "utf8");
+  const invocable = modelInvocable(text);
+  if (invocable !== text) writeFileSync(skillFile, invocable);
+  rmSync(path, { recursive: true, force: true });
+  renameSync(staged, path);
+  const fetched = fetchedRoot(dir);
+  if (fetched) rmSync(fetched, { recursive: true, force: true });
   // Give Claude Code's file watcher time to list it.
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
   console.log(`Linked ${name} from ${dir}`);
+  if (invocable !== text) console.log("Removed disable-model-invocation from the copy, so the Skill tool takes it");
   console.log(`Call the Skill tool with "${name}", then run: node sk.mjs unlink ${name}`);
   return 0;
 }
 
-function isLink(path) {
+// SKILL.md without a `disable-model-invocation:` line in its frontmatter.
+function modelInvocable(text) {
+  const fm = /^---\r?\n[\s\S]*?\r?\n---/.exec(text)?.[0];
+  if (!fm) return text;
+  return fm.replace(/^disable-model-invocation:.*\r?\n/m, "") + text.slice(fm.length);
+}
+
+// Marks a folder link made in claudeSkills, with the Claude Code process it was
+// made in (CLAUDE_PID) so prune leaves it alone while that session runs.
+const MARK = ".sk-link";
+
+function owner(source) {
+  const pid = Number(process.env.CLAUDE_PID) || undefined;
+  return { source, pid, session: process.env.CLAUDE_CODE_SESSION_ID };
+}
+
+function isOurs(path) {
+  return existsSync(join(path, MARK));
+}
+
+function readMark(path) {
   try {
-    return lstatSync(path).isSymbolicLink();
+    return JSON.parse(readFileSync(join(path, MARK), "utf8"));
   } catch {
-    return false;
+    return {};
   }
 }
 
+function alive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+// The sk-* folder resolveDir fetched a registry skill into, if dir is one.
+function fetchedRoot(dir) {
+  const parts = relative(tmpdir(), dir).split(sep);
+  const fetched = parts.length === 4 && /^sk-/.test(parts[0]) && parts[1] === ".claude" && parts[2] === "skills";
+  return fetched ? join(tmpdir(), parts[0]) : undefined;
+}
+
+// Drop the skill from the listing once the Skill tool has loaded it. Only
+// SKILL.md goes: scripts/, references/ and the rest stay at the paths the skill
+// was given until the session ends and prune removes them.
 function unlink(name) {
   if (!name) fail("unlink needs a skill name");
   const path = join(claudeSkills, name);
-  if (!isLink(path)) fail(`${path} is not a link; leaving it alone`);
-  unlinkSync(path);
+  if (!isOurs(path)) fail(`${path} was not made by sk link; leaving it alone`);
+  rmSync(join(path, "SKILL.md"), { force: true });
+  const rest = readdirSync(path).filter((n) => n !== MARK);
+  if (rest.length === 0) rmSync(path, { recursive: true, force: true });
   console.log(`Unlinked ${name}`);
+  if (rest.length > 0) console.log(`Kept ${rest.join(", ")} in ${path} for this session`);
   return 0;
 }
 
-// Temp folders this skill leaves behind: sk-* from link and --out, and
-// skills-use-* where `skills use` copies supporting files. Folders a live link
-// in the Claude Code skills folder still points into are kept; links whose
-// temp folder is gone are removed.
+// Temp folders this skill leaves behind: sk-* from --out, and skills-use-*
+// where `skills use` copies supporting files, once older than --hours. Folders
+// link made in the Claude Code skills folder go once their session has ended,
+// or, without a recorded session, once older than --hours.
+// --hook: run from a SessionStart or SessionEnd hook, which passes the session
+// as JSON on stdin. SessionEnd fires while the process is still alive, so the
+// ending session's folders are matched by session_id instead.
 function prune(flags) {
+  const hook = flags.includes("--hook");
+  let ending;
+  if (hook) {
+    try {
+      const event = JSON.parse(readFileSync(0, "utf8"));
+      if (event.hook_event_name === "SessionEnd") ending = event.session_id;
+    } catch {}
+  }
   const hi = flags.indexOf("--hours");
   const hours = hi === -1 ? 1 : Number(flags[hi + 1]);
   if (!Number.isFinite(hours) || hours < 0) fail("--hours needs a number of hours, 0 or more");
@@ -244,26 +312,26 @@ function prune(flags) {
   const cutoff = Date.now() - hours * 3600_000;
   const verb = dry ? "would remove" : "removed";
 
-  const inUse = new Set();
   let links = 0;
   if (existsSync(claudeSkills)) {
     for (const entry of readdirSync(claudeSkills)) {
       const path = join(claudeSkills, entry);
-      if (!isLink(path)) continue;
-      const target = resolve(claudeSkills, readlinkSync(path));
-      if (!target.startsWith(tmp)) continue;
-      if (existsSync(target)) {
-        inUse.add(target);
+      if (!isOurs(path)) continue;
+      const { pid, session } = readMark(path);
+      const ended = ending !== undefined && session === ending;
+      if (!ended && (pid ? alive(pid) : statSync(join(path, MARK)).mtimeMs > cutoff)) {
+        console.log(`kept ${path}${pid ? ` (session ${pid} running)` : ""}`);
         continue;
       }
-      if (!dry) unlinkSync(path);
-      console.log(`${verb} dangling link ${path}`);
+      if (!dry) rmSync(path, { recursive: true, force: true });
+      console.log(`${verb} ${path}`);
       links++;
     }
   }
 
   let dirs = 0;
-  for (const entry of readdirSync(tmp)) {
+  // SessionEnd hooks get 1.5 s; the temp folder scan waits for the next SessionStart.
+  for (const entry of ending === undefined ? readdirSync(tmp) : []) {
     if (!/^(sk-|skills-use-)/.test(entry)) continue;
     const path = join(tmp, entry);
     let st;
@@ -273,14 +341,10 @@ function prune(flags) {
       continue;
     }
     if (!st.isDirectory() || st.mtimeMs > cutoff) continue;
-    if ([...inUse].some((t) => t === path || t.startsWith(path + "/") || t.startsWith(path + "\\"))) {
-      console.log(`kept ${path} (linked)`);
-      continue;
-    }
     if (!dry) rmSync(path, { recursive: true, force: true });
     dirs++;
   }
-  console.log(`${verb} ${dirs} temp folder(s) older than ${hours}h and ${links} dangling link(s) from ${tmp}`);
+  console.log(`${verb} ${dirs} temp folder(s) older than ${hours}h from ${tmp} and ${links} linked skill folder(s)`);
   return 0;
 }
 
@@ -297,6 +361,6 @@ switch (command) {
     process.exit(prune(rest));
   default:
     fail(
-      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run]",
+      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run] [--hook]",
     );
 }

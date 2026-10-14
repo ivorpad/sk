@@ -1,0 +1,10 @@
+{
+  "name": "sk",
+  "version": "0.1.0",
+  "description": "One skill that loads every other skill on demand, from a local library or skills.sh, and cleans up after the session.",
+  "author": { "name": "Ivor Padilla" },
+  "homepage": "https://github.com/ivorpad/sk",
+  "repository": "https://github.com/ivorpad/sk",
+  "license": "MIT",
+  "keywords": ["skills", "on-demand", "context", "skills.sh"]
+}

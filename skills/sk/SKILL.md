@@ -54,13 +54,15 @@ Load it natively:
 node <sk> link <target>
 ```
 
-It puts the skill in Claude Code's skills folder, where it shows up within seconds, and prints its name. Call the Skill tool with that name and follow the skill. Once it has launched, remove the link so it doesn't stay listed:
+It copies the skill into Claude Code's skills folder, where it shows up within seconds, and prints its name. Call the Skill tool with that name and follow the skill. Once it has launched, take it out of the listing:
 
 ```bash
 node <sk> unlink <name>
 ```
 
-`link` refuses to replace an existing skill of the same name and says so. If it fails, or the Skill tool refuses the skill (an author can mark a skill user-only; then tell the user to type `/<name>`), unlink and load it as text instead.
+This removes only the copy's `SKILL.md`. The skill's base directory and its `scripts/`, `references/` and other files stay where the skill says for the rest of the session, so run and read them from there.
+
+`link` refuses to replace a skill of the same name it didn't make, and says so. The copy drops `disable-model-invocation`, so a skill its author kept for `/<name>` loads too: the user asked for it. If `link` fails or the Skill tool still refuses the skill, unlink and load it as text instead.
 
 ### Without one (Codex and others), or as the fallback
 
@@ -79,7 +81,7 @@ node <sk> prune --dry-run
 node <sk> prune
 ```
 
-It deletes the temp folders that `use`, `link` and `--out` leave (`sk-*`, and `skills-use-*` from `skills use`) once they're an hour old (`--hours N` to change), keeps any folder a live link still points into, and removes links in Claude Code's skills folder whose temp folder is gone. Show the user the dry run first.
+It deletes the temp folders that `use` and `--out` leave (`sk-*`, and `skills-use-*` from `skills use`) once they're an hour old (`--hours N` to change), and the skill folders `link` made once the Claude Code session that made them has ended. Installed as a plugin, `sk` already runs this when a session starts and ends. Show the user the dry run first.
 
 ## Hand-offs
 

@@ -1,0 +1,22 @@
+{
+  "name": "sk",
+  "owner": { "name": "Ivor Padilla" },
+  "metadata": {
+    "description": "sk: load skills on demand instead of installing them",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "sk",
+      "source": "./",
+      "description": "One skill that loads every other skill on demand, from a local library or skills.sh, and cleans up after the session.",
+      "version": "0.1.0",
+      "author": { "name": "Ivor Padilla" },
+      "keywords": ["skills", "on-demand", "context", "skills.sh"],
+      "category": "productivity",
+      "homepage": "https://github.com/ivorpad/sk",
+      "repository": "https://github.com/ivorpad/sk",
+      "license": "MIT"
+    }
+  ]
+}
