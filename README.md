@@ -35,7 +35,7 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 /sk find pdf                     # local library first, then skills.sh
 /sk use pdf                      # $SKILLS_HOME/pdf
 /sk use anthropics/skills@pdf    # straight from the registry
-/sk prune                        # clean up temp folders loaded skills left behind
+/sk prune                        # remove what loaded skills left on disk (automatic with the plugin)
 ```
 
 The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
@@ -59,11 +59,22 @@ You can run it yourself too: `node <sk folder>/scripts/sk.mjs find pdf`, where t
 
 `skills use` copies the skill's `scripts/` and `references/` to a temp folder and says where, so relative paths in the skill still resolve.
 
+## What stays on disk, and when it goes
+
+On Claude Code, `link` copies the skill to `~/.claude/skills/<session>-<name>`, where `<session>` is the first 8 characters of the session id. `unlink` runs right after the Skill tool launches it and deletes only that copy's `SKILL.md`. From then on no session lists the skill, but its `scripts/`, `references/` and other files stay at the paths the skill was given. They stay until a prune removes the folder:
+
+- With the plugin, the `SessionEnd` hook prunes that session's folders when it ends, which covers exiting, `/clear` and switching away with `/resume`. The `SessionStart` hook catches folders from sessions that crashed.
+- Installed with `npx skills add`, there are no hooks, so folders stay until you run `/sk prune`. It skips any folder whose session is still running.
+- A skill that is only a `SKILL.md` leaves nothing behind: `unlink` removes its folder at once.
+
+A session resumed after its `SessionEnd` hook ran has lost those files. Load the skill again.
+
+The temp folder a registry skill is fetched into is deleted as soon as `link` has copied it. Temp folders from `use` and `--out` (`sk-*`, `skills-use-*`) are pruned once they're an hour old (`--hours N` to change), by the `SessionStart` hook or `/sk prune`.
+
 ## Things to know
 
 - On Claude Code, `sk` loads skills natively. It copies the skill into `~/.claude/skills`, which Claude Code watches, calls the Skill tool, then deletes the copy's `SKILL.md`. You see the usual `Skill(name)` launch and nothing stays listed, while `scripts/` and `references/` stay reachable for the session. That the Skill tool accepts a skill added mid-session is observed behavior (Claude Code 2.1.299), not documented. If it stops working, `sk` falls back to the text load.
 - As a plugin, the skill is `/sk:sk`, since Claude Code prefixes plugin skills with the plugin name. Asking in words ("use the pdf skill") works either way.
-- A session resumed after it ended has lost the copies its `SessionEnd` hook removed. Load the skill again.
 - Other agents (Codex and the rest) have no Skill tool, so the skill arrives as tool output. The instructions still land in context and the agent follows them.
 - A skill that hands off to another one ("call the Skill tool with X") can't reach X through the native loader, because X isn't installed. `sk` tells the agent to load X the same way.
 - Registry skills are other people's instructions. `sk` names the source repo before following one and asks before running any script it ships.
