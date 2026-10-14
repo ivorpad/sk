@@ -8,11 +8,26 @@ Every installed skill puts its description in the agent's context at the start o
 
 ## Install
 
-```bash
-npx skills add ivorpad/sk -g
-```
+Paste this into Claude Code, Codex or any agent with a shell:
 
-Then move your other skills out of `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills` and the like, into `~/.skills`, one folder per skill (`~/.skills/<name>/SKILL.md`). Set `SKILLS_HOME` to use another folder. With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
+````text
+Set up the sk skill from https://github.com/ivorpad/sk so that it is the only skill my agents load, and every other skill loads on demand.
+
+1. Check `node --version` is 18 or later. Stop and tell me if not.
+2. Install it globally: `npx skills add ivorpad/sk -g -y`.
+3. Use `~/.skills` as the skill library, unless SKILLS_HOME is already set; then use that. Create the folder if it's missing.
+4. Find every skill installed outside the library: each folder holding a SKILL.md directly under ~/.claude/skills, ~/.agents/skills, ~/.codex/skills, ~/.cursor/skills and ~/.copilot/skills, following symlinks. Skip sk itself. Skip anything managed elsewhere: plugin caches, ~/.codex/skills/.system, and ~/.claude/skills/synced (claude.ai sync). Skip skills committed inside project repositories.
+5. Show me the list: name, where it is, and whether the library already has a skill of that name. Ask before moving anything.
+6. Back up every folder you will change into one dated tar.gz under my home directory, and tell me its path.
+7. Copy each skill into the library as <library>/<name>/, following symlinks and skipping .git, node_modules, .venv and __pycache__. When the library already has that name with different content, keep the copy whose SKILL.md was modified most recently, and list what you dropped.
+8. Only after every copy is verified, remove the originals from the agent folders, leaving sk.
+9. If the library isn't ~/.skills, make SKILLS_HOME stick: add `export SKILLS_HOME="<library>"` to my shell profile (~/.zshenv for zsh, ~/.bashrc for bash, `setx SKILLS_HOME "<library>"` on Windows), and add it under "env" in ~/.claude/settings.json if I use Claude Code.
+10. If ~/.claude/settings.json has "skillOverrides" entries for skills you moved, tell me. They can stop sk loading those skills natively, and removing them is my call.
+11. Verify: list each agent skill folder (it should hold only sk), then run `node <sk folder>/scripts/sk.mjs find <a word from one moved skill>` and show me the output.
+12. Report what moved, what you skipped and why, the backup path, and anything still loading that you couldn't move.
+````
+
+Prefer to do it by hand: `npx skills add ivorpad/sk -g`, then move your skills into `~/.skills/<name>/SKILL.md` (or the folder `SKILLS_HOME` points at). With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
 
 Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and Windows.
 
