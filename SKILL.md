@@ -35,6 +35,8 @@ Any of these is a request to load a skill now:
 
 - `/sk use <name>` or `/sk <name>`: a skill in the local library.
 - `/sk use owner/repo@skill`: a registry skill.
+- `/sk use path/to/skill`: a skill folder on disk.
+- `/sk https://github.com/owner/repo/tree/main/skills/name`: a repo URL pointing at one skill. A repo with several skills fails with their names; ask which, then pass `--skill <name>`.
 - A confirmed pick from **find**.
 - A prompt pasted from skills.sh, with or without `/sk` in front:
 

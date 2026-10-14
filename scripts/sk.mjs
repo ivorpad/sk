@@ -148,6 +148,7 @@ function use(target, extra) {
   if (!target.includes("/") && existsSync(join(local, "SKILL.md"))) {
     return skills("use", local, ...extra);
   }
+  if (existsSync(join(resolve(target), "SKILL.md"))) return skills("use", resolve(target), ...extra);
   if (target.includes("/")) return skills("use", target, ...extra);
   fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
 }
@@ -157,13 +158,18 @@ function remote(target, extra) {
   const si = extra.indexOf("--skill");
   if (si !== -1) return { source: target, skill: extra[si + 1] };
   const at = target.lastIndexOf("@");
-  if (at > 0) return { source: target.slice(0, at), skill: target.slice(at + 1) };
-  fail(`say which skill: ${target}@<skill> or ${target} --skill <name>`);
+  if (at > 0 && !target.slice(at).includes("/")) {
+    return { source: target.slice(0, at), skill: target.slice(at + 1) };
+  }
+  // A URL or repo on its own: fine when it holds (or points at) a single skill.
+  return { source: target, skill: undefined };
 }
 
 // The skill's folder on disk: the library copy, or a registry skill fetched
 // into a temp project with `skills add --copy`, which never touches real skill folders.
 function resolveDir(target, extra) {
+  // A folder on disk: path/to/skill
+  if (existsSync(join(resolve(target), "SKILL.md"))) return resolve(target);
   if (!target.includes("/")) {
     const local = join(library, target);
     if (existsSync(join(local, "SKILL.md"))) return local;
@@ -171,15 +177,23 @@ function resolveDir(target, extra) {
   }
   const { source, skill } = remote(target, extra);
   const tmp = mkdtempSync(join(tmpdir(), "sk-"));
-  const status = run(["add", source, "--skill", skill, "--copy", "-y", "-a", "claude-code"], {
+  const pick = skill ? ["--skill", skill] : [];
+  const status = run(["add", source, ...pick, "--copy", "-y", "-a", "claude-code"], {
     cwd: tmp,
     quiet: true,
   });
-  const dir = join(tmp, ".claude", "skills", skill);
-  if (status !== 0 || !existsSync(join(dir, "SKILL.md"))) {
-    fail(`could not fetch ${skill} from ${source}; use: node sk.mjs use ${target} ${extra.join(" ")} --out`);
+  const root = join(tmp, ".claude", "skills");
+  const found = existsSync(root)
+    ? readdirSync(root).filter((n) => existsSync(join(root, n, "SKILL.md")))
+    : [];
+  if (status !== 0 || found.length === 0) {
+    fail(`could not fetch ${skill ?? "a skill"} from ${source}; use: node sk.mjs use ${target} ${extra.join(" ")} --out`);
   }
-  return dir;
+  if (skill) return join(root, skill);
+  if (found.length > 1) {
+    fail(`${source} has ${found.length} skills: ${found.join(", ")}. Pick one: ${source} --skill <name>`);
+  }
+  return join(root, found[0]);
 }
 
 function link(target, extra) {
