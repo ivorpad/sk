@@ -4,6 +4,8 @@ One skill that loads every other skill on demand.
 
 Every installed skill puts its description in the agent's context at the start of every session, whether you use it or not. On my machine that was 78 skills and about 23,000 characters of descriptions, roughly 6k tokens, before I typed anything. `sk` is the only skill you install. The rest stay out of the agent's skill folders and get loaded when you ask, through [`npx skills use`](https://github.com/vercel-labs/skills), which prints a skill as a prompt without installing it.
 
+![A pasted skills.sh prompt run through /sk in Claude Code: one shell command links the skill, Skill(minimalist-ui) loads it natively, a second shell command removes the link](docs/native-load.png)
+
 ## Install
 
 ```bash
@@ -21,8 +23,6 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 /sk use pdf                      # $SKILLS_HOME/pdf
 /sk use anthropics/skills@pdf    # straight from the registry
 ```
-
-![A pasted skills.sh prompt run through /sk in Claude Code: one shell command links the skill, Skill(minimalist-ui) loads it natively, a second shell command removes the link](docs/native-load.png)
 
 The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
 
