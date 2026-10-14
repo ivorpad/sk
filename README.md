@@ -26,6 +26,7 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 /sk find pdf                     # local library first, then skills.sh
 /sk use pdf                      # $SKILLS_HOME/pdf
 /sk use anthropics/skills@pdf    # straight from the registry
+/sk prune                        # clean up temp folders loaded skills left behind
 ```
 
 The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
@@ -41,6 +42,7 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
 | `link <target>` | Claude Code only: the library folder, or the registry skill fetched into a temp folder with `skills add --copy`, linked into `~/.claude/skills` |
 | `unlink <name>` | removes that link, and only a link |
+| `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), keeps any a live link uses, removes dangling links |
 | `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |
 | any `use` with `--out` | the same, saved whole to a temp file whose path it prints |
 

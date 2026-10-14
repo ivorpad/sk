@@ -5,6 +5,7 @@
 //   node sk.mjs use <name | owner/repo@skill | url --skill <name>>   print the skill as a prompt
 //   node sk.mjs link <same targets>             Claude Code: put it in the skills folder for the Skill tool
 //   node sk.mjs unlink <name>                   remove a link that link made
+//   node sk.mjs prune [--hours N] [--dry-run]   delete temp folders from skills use / link / --out
 //
 // Library: $SKILLS_HOME, else ~/.skills. One folder per skill: <library>/<name>/SKILL.md
 // Runner: --runner npx|pnpm|bun, else $SK_RUNNER, else npx.
@@ -14,6 +15,9 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
+  readlinkSync,
+  rmSync,
+  statSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -23,7 +27,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 let runner = process.env.SK_RUNNER || "npx";
@@ -213,6 +217,59 @@ function unlink(name) {
   return 0;
 }
 
+// Temp folders this skill leaves behind: sk-* from link and --out, and
+// skills-use-* where `skills use` copies supporting files. Folders a live link
+// in the Claude Code skills folder still points into are kept; links whose
+// temp folder is gone are removed.
+function prune(flags) {
+  const hi = flags.indexOf("--hours");
+  const hours = hi === -1 ? 1 : Number(flags[hi + 1]);
+  if (!Number.isFinite(hours) || hours < 0) fail("--hours needs a number of hours, 0 or more");
+  const dry = flags.includes("--dry-run");
+  const tmp = tmpdir();
+  const cutoff = Date.now() - hours * 3600_000;
+  const verb = dry ? "would remove" : "removed";
+
+  const inUse = new Set();
+  let links = 0;
+  if (existsSync(claudeSkills)) {
+    for (const entry of readdirSync(claudeSkills)) {
+      const path = join(claudeSkills, entry);
+      if (!isLink(path)) continue;
+      const target = resolve(claudeSkills, readlinkSync(path));
+      if (!target.startsWith(tmp)) continue;
+      if (existsSync(target)) {
+        inUse.add(target);
+        continue;
+      }
+      if (!dry) unlinkSync(path);
+      console.log(`${verb} dangling link ${path}`);
+      links++;
+    }
+  }
+
+  let dirs = 0;
+  for (const entry of readdirSync(tmp)) {
+    if (!/^(sk-|skills-use-)/.test(entry)) continue;
+    const path = join(tmp, entry);
+    let st;
+    try {
+      st = statSync(path);
+    } catch {
+      continue;
+    }
+    if (!st.isDirectory() || st.mtimeMs > cutoff) continue;
+    if ([...inUse].some((t) => t === path || t.startsWith(path + "/") || t.startsWith(path + "\\"))) {
+      console.log(`kept ${path} (linked)`);
+      continue;
+    }
+    if (!dry) rmSync(path, { recursive: true, force: true });
+    dirs++;
+  }
+  console.log(`${verb} ${dirs} temp folder(s) older than ${hours}h and ${links} dangling link(s) from ${tmp}`);
+  return 0;
+}
+
 switch (command) {
   case "find":
     process.exit(find(rest));
@@ -222,8 +279,10 @@ switch (command) {
     process.exit(link(rest[0], rest.slice(1)));
   case "unlink":
     process.exit(unlink(rest[0]));
+  case "prune":
+    process.exit(prune(rest));
   default:
     fail(
-      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name>",
+      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run]",
     );
 }

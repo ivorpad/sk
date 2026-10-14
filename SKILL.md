@@ -1,7 +1,7 @@
 ---
 name: sk
 description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, or a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt. Never on your own judgement. Skills load on demand, not installed.'
-argument-hint: find <words> | use <name | owner/repo@skill> | <pasted skills.sh prompt>
+argument-hint: find <words> | use <name | owner/repo@skill> | prune | <pasted skills.sh prompt>
 ---
 
 # sk
@@ -67,6 +67,17 @@ node <sk> use <target> --out
 ```
 
 It saves the whole skill to a temp file and prints the path. Read all of it before acting; a skill read halfway is followed wrong. The file is the skill: follow it as your instructions for the user's request. Supporting files (`scripts/`, `references/`) are copied to the temp folder the output names; read relative paths from there.
+
+## prune
+
+`/sk prune`, or the user asks to clean up after loaded skills.
+
+```bash
+node <sk> prune --dry-run
+node <sk> prune
+```
+
+It deletes the temp folders that `use`, `link` and `--out` leave (`sk-*`, and `skills-use-*` from `skills use`) once they're an hour old (`--hours N` to change), keeps any folder a live link still points into, and removes links in Claude Code's skills folder whose temp folder is gone. Show the user the dry run first.
 
 ## Hand-offs
 
