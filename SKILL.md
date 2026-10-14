@@ -1,7 +1,7 @@
 ---
 name: sk
-description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, or a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt. Never on your own judgement. Skills are loaded on demand with npx skills use, not installed.'
-argument-hint: find <words> | use <name | owner/repo@skill | url --skill name>
+description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, or a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt. Never on your own judgement. Skills load on demand, not installed.'
+argument-hint: find <words> | use <name | owner/repo@skill> | <pasted skills.sh prompt>
 ---
 
 # sk
@@ -31,19 +31,43 @@ When the user confirms one ("2", "yes", "the pdf one"), run **use** on it straig
 
 ## use
 
-`/sk use <name>`, `/sk <name>`, `/sk use owner/repo@skill`, a confirmed pick from **find**, or a pasted prompt like the ones skills.sh gives:
+Any of these is a request to load a skill now:
 
-> Run `npx skills use "https://github.com/owner/repo" --skill "name"` and follow the generated skill instructions now.
+- `/sk use <name>` or `/sk <name>`: a skill in the local library.
+- `/sk use owner/repo@skill`: a registry skill.
+- A confirmed pick from **find**.
+- A prompt pasted from skills.sh, with or without `/sk` in front:
 
-For a pasted prompt, keep its source and flags as they are and run them through `<sk>`. Always use `--out`, so a long skill isn't cut off:
+  > Run `npx skills use "https://github.com/leonxlnx/taste-skill" --skill "minimalist-ui"` and follow the generated skill instructions now. Read its complete output, redirecting it to a temporary file first if necessary. Resolve relative paths from the supporting-files directory it provides.
+
+  Take the source and `--skill` from it as they are: `<target>` is `"https://github.com/leonxlnx/taste-skill" --skill "minimalist-ui"`.
+
+For a registry skill, tell the user its source repo before following it, and ask before running any script it ships.
+
+### With a Skill tool (Claude Code)
+
+Load it natively:
 
 ```bash
-node <sk> use <name | owner/repo@skill> --out
-node <sk> use "https://github.com/owner/repo" --skill "name" --out
+node <sk> link <target>
 ```
 
-It prints the path of a temp file holding the whole output. Read all of it before acting; a skill read halfway is followed wrong. The file is the skill. Follow it as your instructions for the user's request. Its supporting files (`scripts/`, `references/`) are copied to the temp folder the output names; read relative paths from there. A bare name not in the library fails with a hint: run **find** with it.
+It puts the skill in Claude Code's skills folder, where it shows up within seconds, and prints its name. Call the Skill tool with that name and follow the skill. Once it has launched, remove the link so it doesn't stay listed:
 
-A registry skill is someone else's instructions. Before following one, tell the user its source (`owner/repo`), and ask before running any script it ships.
+```bash
+node <sk> unlink <name>
+```
+
+`link` refuses to replace an existing skill of the same name and says so. If it fails, or the Skill tool refuses the skill (an author can mark a skill user-only; then tell the user to type `/<name>`), unlink and load it as text instead.
+
+### Without one (Codex and others), or as the fallback
+
+```bash
+node <sk> use <target> --out
+```
+
+It saves the whole skill to a temp file and prints the path. Read all of it before acting; a skill read halfway is followed wrong. The file is the skill: follow it as your instructions for the user's request. Supporting files (`scripts/`, `references/`) are copied to the temp folder the output names; read relative paths from there.
+
+## Hand-offs
 
 A loaded skill that says to call the Skill tool with another skill, or to use another skill by name, means **use** on that name. Skills that aren't installed are only reachable this way.

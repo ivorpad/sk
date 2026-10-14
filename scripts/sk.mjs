@@ -3,13 +3,25 @@
 //
 //   node sk.mjs find <words...>                 local library, then skills.sh
 //   node sk.mjs use <name | owner/repo@skill | url --skill <name>>   print the skill as a prompt
+//   node sk.mjs link <same targets>             Claude Code: put it in the skills folder for the Skill tool
+//   node sk.mjs unlink <name>                   remove a link that link made
 //
 // Library: $SKILLS_HOME, else ~/.skills. One folder per skill: <library>/<name>/SKILL.md
 // Runner: --runner npx|pnpm|bun, else $SK_RUNNER, else npx.
 // --out writes the output to a temp file and prints the path instead.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +39,8 @@ const out = oi !== -1;
 if (out) args.splice(oi, 1);
 const [command, ...rest] = args;
 const library = process.env.SKILLS_HOME || join(homedir(), ".skills");
+// Claude Code watches this folder and picks up a new skill mid-session.
+const claudeSkills = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "skills");
 
 function fail(message) {
   process.stderr.write(`sk: ${message}\n`);
@@ -35,6 +49,10 @@ function fail(message) {
 
 // `skills` through the chosen runner. Windows needs a shell to find npx.cmd.
 function skills(...cliArgs) {
+  return run(cliArgs, {});
+}
+
+function run(cliArgs, { cwd, quiet }) {
   const [bin, pre] = {
     npx: ["npx", ["--yes"]],
     pnpm: ["pnpm", ["dlx"]],
@@ -45,6 +63,9 @@ function skills(...cliArgs) {
   const argv = [...pre, "skills", ...cliArgs].map((a) =>
     windows && /\s/.test(a) ? `"${a}"` : a,
   );
+  if (quiet) {
+    return spawnSync(bin, argv, { stdio: "ignore", shell: windows, cwd }).status ?? 1;
+  }
   if (!out) {
     const result = spawnSync(bin, argv, { stdio: "inherit", shell: windows });
     return result.status ?? 1;
@@ -127,11 +148,82 @@ function use(target, extra) {
   fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
 }
 
+// owner/repo@skill, or a source plus --skill <name>.
+function remote(target, extra) {
+  const si = extra.indexOf("--skill");
+  if (si !== -1) return { source: target, skill: extra[si + 1] };
+  const at = target.lastIndexOf("@");
+  if (at > 0) return { source: target.slice(0, at), skill: target.slice(at + 1) };
+  fail(`say which skill: ${target}@<skill> or ${target} --skill <name>`);
+}
+
+// The skill's folder on disk: the library copy, or a registry skill fetched
+// into a temp project with `skills add --copy`, which never touches real skill folders.
+function resolveDir(target, extra) {
+  if (!target.includes("/")) {
+    const local = join(library, target);
+    if (existsSync(join(local, "SKILL.md"))) return local;
+    fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
+  }
+  const { source, skill } = remote(target, extra);
+  const tmp = mkdtempSync(join(tmpdir(), "sk-"));
+  const status = run(["add", source, "--skill", skill, "--copy", "-y", "-a", "claude-code"], {
+    cwd: tmp,
+    quiet: true,
+  });
+  const dir = join(tmp, ".claude", "skills", skill);
+  if (status !== 0 || !existsSync(join(dir, "SKILL.md"))) {
+    fail(`could not fetch ${skill} from ${source}; use: node sk.mjs use ${target} ${extra.join(" ")} --out`);
+  }
+  return dir;
+}
+
+function link(target, extra) {
+  if (!target) fail("link needs a skill name, owner/repo@skill, or a repo URL with --skill");
+  const dir = resolveDir(target, extra);
+  const name = dir.split(/[\\/]/).pop();
+  const path = join(claudeSkills, name);
+  if (existsSync(path) || isLink(path)) {
+    fail(`${path} already exists; not replacing it. Load that one, or use: node sk.mjs use ${target} --out`);
+  }
+  mkdirSync(claudeSkills, { recursive: true });
+  // A junction needs no admin rights on Windows; elsewhere the type is ignored.
+  symlinkSync(dir, path, "junction");
+  // Give Claude Code's file watcher time to list it.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+  console.log(`Linked ${name} from ${dir}`);
+  console.log(`Call the Skill tool with "${name}", then run: node sk.mjs unlink ${name}`);
+  return 0;
+}
+
+function isLink(path) {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function unlink(name) {
+  if (!name) fail("unlink needs a skill name");
+  const path = join(claudeSkills, name);
+  if (!isLink(path)) fail(`${path} is not a link; leaving it alone`);
+  unlinkSync(path);
+  console.log(`Unlinked ${name}`);
+  return 0;
+}
+
 switch (command) {
   case "find":
     process.exit(find(rest));
   case "use":
     process.exit(use(rest[0], rest.slice(1)));
+  case "link":
+    process.exit(link(rest[0], rest.slice(1)));
+  case "unlink":
+    process.exit(unlink(rest[0]));
   default:
-    fail("usage: node sk.mjs find <words...> | use <name | owner/repo@skill | url --skill <name>> [--runner npx|pnpm|bun]");
+    fail(
+      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name>",
+    );
 }
