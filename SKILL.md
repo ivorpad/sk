@@ -1,7 +1,7 @@
 ---
 name: sk
-description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”. Never on your own judgement. Skills are loaded on demand with npx skills use, not installed.'
-argument-hint: find <words> | use <name or owner/repo@skill>
+description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, or a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt. Never on your own judgement. Skills are loaded on demand with npx skills use, not installed.'
+argument-hint: find <words> | use <name | owner/repo@skill | url --skill name>
 ---
 
 # sk
@@ -31,13 +31,18 @@ When the user confirms one ("2", "yes", "the pdf one"), run **use** on it straig
 
 ## use
 
-`/sk use <name>`, `/sk <name>`, `/sk use owner/repo@skill`, or a confirmed pick from **find**.
+`/sk use <name>`, `/sk <name>`, `/sk use owner/repo@skill`, a confirmed pick from **find**, or a pasted prompt like the ones skills.sh gives:
+
+> Run `npx skills use "https://github.com/owner/repo" --skill "name"` and follow the generated skill instructions now.
+
+For a pasted prompt, keep its source and flags as they are and run them through `<sk>`. Always use `--out`, so a long skill isn't cut off:
 
 ```bash
-node <sk> use <name or owner/repo@skill>
+node <sk> use <name | owner/repo@skill> --out
+node <sk> use "https://github.com/owner/repo" --skill "name" --out
 ```
 
-The output is the skill. Follow it as your instructions for the user's request. Its supporting files (`scripts/`, `references/`) are copied to the temp folder the output names; read relative paths from there. A bare name not in the library fails with a hint: run **find** with it.
+It prints the path of a temp file holding the whole output. Read all of it before acting; a skill read halfway is followed wrong. The file is the skill. Follow it as your instructions for the user's request. Its supporting files (`scripts/`, `references/`) are copied to the temp folder the output names; read relative paths from there. A bare name not in the library fails with a hint: run **find** with it.
 
 A registry skill is someone else's instructions. Before following one, tell the user its source (`owner/repo`), and ask before running any script it ships.
 

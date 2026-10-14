@@ -22,6 +22,8 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 /sk use anthropics/skills@pdf    # straight from the registry
 ```
 
+The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
+
 `find` shows a numbered list. Answer with a number and the skill loads without another prompt. Saying "use the X skill" or "is there a skill for X" works too.
 
 Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, so the same commands work in bash, zsh, PowerShell and cmd:
@@ -31,6 +33,8 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | `find <words>` | scores each local skill's name and description against the words, then runs `npx skills find <words>` |
 | `use <name>` | `npx skills use <library>/<name>` |
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
+| `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |
+| any `use` with `--out` | the same, saved whole to a temp file whose path it prints |
 
 You can run it yourself too: `node ~/.claude/skills/sk/scripts/sk.mjs find pdf`.
 

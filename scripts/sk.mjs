@@ -2,14 +2,15 @@
 // sk: find and load skills on demand. Node 18+, no dependencies, any OS.
 //
 //   node sk.mjs find <words...>                 local library, then skills.sh
-//   node sk.mjs use <name | owner/repo@skill>   print the skill as a prompt
+//   node sk.mjs use <name | owner/repo@skill | url --skill <name>>   print the skill as a prompt
 //
 // Library: $SKILLS_HOME, else ~/.skills. One folder per skill: <library>/<name>/SKILL.md
 // Runner: --runner npx|pnpm|bun, else $SK_RUNNER, else npx.
+// --out writes the output to a temp file and prints the path instead.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 const args = process.argv.slice(2);
@@ -19,6 +20,11 @@ if (ri !== -1) {
   runner = args[ri + 1] || runner;
   args.splice(ri, 2);
 }
+// --out: save the full output to a temp file and print its path, so a long
+// skill is read whole instead of cut off by the agent's tool output limit.
+const oi = args.indexOf("--out");
+const out = oi !== -1;
+if (out) args.splice(oi, 1);
 const [command, ...rest] = args;
 const library = process.env.SKILLS_HOME || join(homedir(), ".skills");
 
@@ -39,7 +45,20 @@ function skills(...cliArgs) {
   const argv = [...pre, "skills", ...cliArgs].map((a) =>
     windows && /\s/.test(a) ? `"${a}"` : a,
   );
-  const result = spawnSync(bin, argv, { stdio: "inherit", shell: windows });
+  if (!out) {
+    const result = spawnSync(bin, argv, { stdio: "inherit", shell: windows });
+    return result.status ?? 1;
+  }
+  const result = spawnSync(bin, argv, {
+    stdio: ["ignore", "pipe", "inherit"],
+    shell: windows,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const text = result.stdout?.toString() ?? "";
+  const file = join(mkdtempSync(join(tmpdir(), "sk-")), "skill.txt");
+  writeFileSync(file, text);
+  const lines = text.split("\n").length;
+  console.log(`Saved ${lines} lines to ${file}. Read all of it before acting.`);
   return result.status ?? 1;
 }
 
@@ -97,13 +116,14 @@ function find(words) {
   return skills("find", ...words);
 }
 
-function use(target) {
-  if (!target) fail("use needs a skill name or owner/repo@skill");
+// Extra flags (--skill <name>, as skills.sh prompts give) pass through to `skills use`.
+function use(target, extra) {
+  if (!target) fail("use needs a skill name, owner/repo@skill, or a repo URL with --skill");
   const local = join(library, target);
   if (!target.includes("/") && existsSync(join(local, "SKILL.md"))) {
-    return skills("use", local);
+    return skills("use", local, ...extra);
   }
-  if (target.includes("/")) return skills("use", target);
+  if (target.includes("/")) return skills("use", target, ...extra);
   fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
 }
 
@@ -111,7 +131,7 @@ switch (command) {
   case "find":
     process.exit(find(rest));
   case "use":
-    process.exit(use(rest[0]));
+    process.exit(use(rest[0], rest.slice(1)));
   default:
-    fail("usage: node sk.mjs find <words...> | use <name | owner/repo@skill> [--runner npx|pnpm|bun]");
+    fail("usage: node sk.mjs find <words...> | use <name | owner/repo@skill | url --skill <name>> [--runner npx|pnpm|bun]");
 }
