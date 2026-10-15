@@ -1,6 +1,6 @@
 ---
 name: sk
-description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, or a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt. Never on your own judgement. Skills load on demand, not installed.'
+description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt, or a skill the user asked for that the Skill tool refuses or doesn't list (disable-model-invocation). Never on your own judgement. Skills load on demand, not installed.'
 argument-hint: find <words> | use <name | owner/repo@skill> | prune | <pasted skills.sh prompt>
 ---
 
@@ -38,6 +38,7 @@ Any of these is a request to load a skill now:
 - `/sk use path/to/skill`: a skill folder on disk.
 - `/sk https://github.com/owner/repo/tree/main/skills/name`: a repo URL pointing at one skill. A repo with several skills fails with their names; ask which, then pass `--skill <name>`.
 - A confirmed pick from **find**.
+- The user asked for a skill by name and the Skill tool refused it or doesn't list it, because its author set `disable-model-invocation: true`. The user asking is what that setting waits for, so switch: `use <name>` finds it in `.claude/skills` too. For a plugin's skill, pass its folder path.
 - A prompt pasted from skills.sh, with or without `/sk` in front:
 
   > Run `npx skills use "https://github.com/leonxlnx/taste-skill" --skill "minimalist-ui"` and follow the generated skill instructions now. Read its complete output, redirecting it to a temporary file first if necessary. Resolve relative paths from the supporting-files directory it provides.

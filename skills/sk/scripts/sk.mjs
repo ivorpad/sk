@@ -142,13 +142,19 @@ function find(words) {
 // Extra flags (--skill <name>, as skills.sh prompts give) pass through to `skills use`.
 function use(target, extra) {
   if (!target) fail("use needs a skill name, owner/repo@skill, or a repo URL with --skill");
-  const local = join(library, target);
-  if (!target.includes("/") && existsSync(join(local, "SKILL.md"))) {
-    return skills("use", local, ...extra);
-  }
+  const local = target.includes("/") ? undefined : named(target);
+  if (local) return skills("use", local, ...extra);
   if (existsSync(join(resolve(target), "SKILL.md"))) return skills("use", resolve(target), ...extra);
   if (target.includes("/")) return skills("use", target, ...extra);
-  fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
+  fail(`no skill named ${target} in ${library} or .claude/skills; run: node sk.mjs find ${target}`);
+}
+
+// A bare name: the library first, then a skill installed in this project's or
+// the user's .claude/skills. An installed skill the Skill tool won't take
+// (disable-model-invocation) still loads here when the user asks for it.
+function named(name) {
+  const dirs = [library, join(process.cwd(), ".claude", "skills"), claudeSkills];
+  return dirs.map((d) => join(d, name)).find((d) => existsSync(join(d, "SKILL.md")));
 }
 
 // owner/repo@skill, or a source plus --skill <name>.
@@ -169,9 +175,9 @@ function resolveDir(target, extra) {
   // A folder on disk: path/to/skill
   if (existsSync(join(resolve(target), "SKILL.md"))) return resolve(target);
   if (!target.includes("/")) {
-    const local = join(library, target);
-    if (existsSync(join(local, "SKILL.md"))) return local;
-    fail(`no skill named ${target} in ${library}; run: node sk.mjs find ${target}`);
+    const local = named(target);
+    if (local) return local;
+    fail(`no skill named ${target} in ${library} or .claude/skills; run: node sk.mjs find ${target}`);
   }
   const { source, skill } = remote(target, extra);
   const tmp = mkdtempSync(join(tmpdir(), "sk-"));

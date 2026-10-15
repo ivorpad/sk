@@ -47,7 +47,7 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | You ask for | `node sk.mjs ...` does |
 | --- | --- |
 | `find <words>` | scores each local skill's name and description against the words, then runs `npx skills find <words>` |
-| `use <name>` | `npx skills use <library>/<name>` |
+| `use <name>` | `npx skills use <library>/<name>`, or the skill in `.claude/skills` when the library has none |
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
 | `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills/<session>-<name>` (the first 8 characters of the session id) without `disable-model-invocation`, so sessions loading the same skill don't share a folder. Refuses to replace a skill it didn't make |
 | `unlink <name>` | deletes the copy's `SKILL.md`, so it leaves the listing. Its other files stay at the paths the Skill tool gave it until the session ends |
@@ -89,6 +89,7 @@ The temp folder a registry skill is fetched into is deleted as soon as `link` ha
 - On Claude Code, `sk` loads skills natively. It copies the skill into `~/.claude/skills`, which Claude Code watches, calls the Skill tool, then deletes the copy's `SKILL.md`. You see the usual `Skill(name)` launch and nothing stays listed, while `scripts/` and `references/` stay reachable for the session. That the Skill tool accepts a skill added mid-session is observed behavior (Claude Code 2.1.299), not documented. If it stops working, `sk` falls back to the text load.
 - As a plugin, the skill is `/sk:sk`, since Claude Code prefixes plugin skills with the plugin name. Asking in words ("use the pdf skill") works either way.
 - Other agents (Codex and the rest) have no Skill tool, so the skill arrives as tool output. The instructions still land in context and the agent follows them.
+- A skill installed with `disable-model-invocation: true` is one the Skill tool refuses unless you type `/<name>`. Ask for it in words ("use the deploy skill") and `sk` loads it anyway, since you asked: a bare name resolves from the library, then `./.claude/skills`, then `~/.claude/skills`, and the linked copy drops the flag. A plugin's skill needs its folder path.
 - A skill that hands off to another one ("call the Skill tool with X") can't reach X through the native loader, because X isn't installed. `sk` tells the agent to load X the same way.
 - Registry skills are other people's instructions. `sk` names the source repo before following one and asks before running any script it ships.
 - In a repo whose instructions ban `npx`, the agent passes `--runner pnpm` or `--runner bun`. `SK_RUNNER` sets a default.
