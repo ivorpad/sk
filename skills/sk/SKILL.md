@@ -1,6 +1,6 @@
 ---
 name: sk
-description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt, or a skill the user asked for that the Skill tool refuses or doesn't list (disable-model-invocation). Never on your own judgement. Skills load on demand, not installed.'
+description: 'Find or load a skill, only when the user asks: `/sk find <words>`, `/sk use <name>`, “use the X skill”, “is there a skill for X”, a pasted “Run `npx skills use …` and follow the generated skill instructions” prompt, or a skill the user asked for that the Skill tool refuses or does not list (disable-model-invocation). Never on your own judgement. Skills load on demand, not installed.'
 argument-hint: find <words> | use <name | owner/repo@skill> | prune | <pasted skills.sh prompt>
 ---
 
@@ -12,7 +12,7 @@ Everything goes through `scripts/sk.mjs` in this skill's folder (Node 18+, any O
 
 Two sources:
 
-- **Local library**: `$SKILLS_HOME`, else `~/.skills`, one folder per skill. Missing folder means no local hits.
+- **Local library**: `$SKILLS_HOME`, else `~/.skills`, one folder per skill, loose (`<library>/vault`) or in a category folder (`<library>/security/vault`). A bare name finds it in any category. Missing folder means no local hits.
 - **Registry**: [skills.sh](https://skills.sh).
 
 In a repository whose instructions ban npx, add `--runner pnpm` (or `--runner bun`) to every command.
@@ -33,7 +33,7 @@ When the user confirms one ("2", "yes", "the pdf one"), run **use** on it straig
 
 Any of these is a request to load a skill now:
 
-- `/sk use <name>` or `/sk <name>`: a skill in the local library.
+- `/sk use <name>` or `/sk <name>`: a skill in the local library, in whatever category it sits. `/sk use security/vault` names the path when two categories hold the same name.
 - `/sk use owner/repo@skill`: a registry skill.
 - `/sk use path/to/skill`: a skill folder on disk.
 - `/sk https://github.com/owner/repo/tree/main/skills/name`: a repo URL pointing at one skill. A repo with several skills fails with their names; ask which, then pass `--skill <name>`.
@@ -83,6 +83,17 @@ node <sk> prune
 ```
 
 It deletes the temp folders that `use` and `--out` leave (`sk-*`, and `skills-use-*` from `skills use`) once they're an hour old (`--hours N` to change), and the skill folders `link` made once the Claude Code session that made them has ended. Installed as a plugin, `sk` already runs this when a session starts and ends. Show the user the dry run first.
+
+## index
+
+`/sk index`, or the user asks to rebuild or check the library index.
+
+```bash
+node <sk> index
+node <sk> index --check
+```
+
+It reads every SKILL.md's frontmatter and writes `INDEX.md` (skills grouped by category, with descriptions) and `INDEX.json` (the format `sr` reads) at the library root. `--check` writes nothing and exits 1 when either is out of date. It refuses when two categories hold a folder of the same name, since `use <name>` would be ambiguous. `find` and `use` read the folders themselves, so a stale index never hides a skill.
 
 ## Hand-offs
 

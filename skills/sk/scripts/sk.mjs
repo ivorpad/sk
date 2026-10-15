@@ -6,8 +6,11 @@
 //   node sk.mjs link <same targets>             Claude Code: copy it into the skills folder for the Skill tool
 //   node sk.mjs unlink <name>                   take it out of the listing, keeping its other files for the session
 //   node sk.mjs prune [--hours N] [--dry-run] [--hook]   delete temp folders and copies whose session has ended
+//   node sk.mjs index [--check]                 write INDEX.md and INDEX.json from the library's frontmatter
 //
-// Library: $SKILLS_HOME, else ~/.skills. One folder per skill: <library>/<name>/SKILL.md
+// Library: $SKILLS_HOME, else ~/.skills. One folder per skill, loose or in a
+// category folder: <library>/<name>/SKILL.md or <library>/<category>/<name>/SKILL.md.
+// A bare name finds the skill in any category.
 // Runner: --runner npx|pnpm|bun, else $SK_RUNNER, else npx.
 // --out writes the output to a temp file and prints the path instead.
 
@@ -85,15 +88,16 @@ function run(cliArgs, { cwd, quiet }) {
   return result.status ?? 1;
 }
 
-// The `description:` value, including folded (>) and literal (|) blocks.
-function description(file) {
+// A frontmatter value, including folded (>) and literal (|) blocks and a plain
+// value that starts on the next, indented line.
+function field(file, key) {
   const text = readFileSync(file, "utf8");
   const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
   const lines = fm.split(/\r?\n/);
-  const i = lines.findIndex((l) => /^description:/.test(l));
+  const i = lines.findIndex((l) => l.startsWith(`${key}:`));
   if (i === -1) return "";
-  let value = lines[i].replace(/^description:\s*/, "");
-  if (/^[>|][-+]?$/.test(value)) {
+  let value = lines[i].slice(key.length + 1).trim();
+  if (value === "" || /^[>|][-+]?$/.test(value)) {
     const block = [];
     for (let j = i + 1; j < lines.length && /^(\s+\S|\s*$)/.test(lines[j]); j++) {
       block.push(lines[j].trim());
@@ -103,13 +107,35 @@ function description(file) {
   return value.replace(/^(["'])(.*)\1$/, "$2").trim();
 }
 
+// Every skill in the library, read fresh from disk each call: a folder holding
+// SKILL.md is a skill, any other folder is a category one level down.
+// `name` is the folder name, which is what `use <name>` takes.
 function localSkills() {
   if (!existsSync(library)) return [];
-  return readdirSync(library, { withFileTypes: true })
-    .filter((e) => e.isDirectory() || e.isSymbolicLink())
-    .map((e) => ({ name: e.name, file: join(library, e.name, "SKILL.md") }))
-    .filter((s) => existsSync(s.file))
-    .map((s) => ({ ...s, description: description(s.file) }));
+  const found = [];
+  for (const top of folders(library)) {
+    const dir = join(library, top);
+    if (existsSync(join(dir, "SKILL.md"))) {
+      found.push({ name: top, category: "", dir });
+      continue;
+    }
+    for (const sub of folders(dir)) {
+      const inner = join(dir, sub);
+      if (existsSync(join(inner, "SKILL.md"))) found.push({ name: sub, category: top, dir: inner });
+    }
+  }
+  return found.map((s) => {
+    const file = join(s.dir, "SKILL.md");
+    const path = s.category ? `${s.category}/${s.name}` : s.name;
+    return { ...s, path, file, title: field(file, "name"), description: field(file, "description") };
+  });
+}
+
+function folders(dir) {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith(".") && e.name !== "node_modules")
+    .map((e) => e.name)
+    .sort();
 }
 
 function find(words) {
@@ -118,9 +144,11 @@ function find(words) {
   const hits = localSkills()
     .map((s) => {
       const name = s.name.toLowerCase();
+      const category = s.category.toLowerCase();
       const desc = s.description.toLowerCase();
       const score = terms.reduce(
-        (n, t) => n + (name.includes(t) ? 3 : 0) + (desc.includes(t) ? 1 : 0),
+        (n, t) =>
+          n + (name.includes(t) ? 3 : 0) + (category.includes(t) ? 1 : 0) + (desc.includes(t) ? 1 : 0),
         0,
       );
       return { ...s, score };
@@ -133,7 +161,8 @@ function find(words) {
   if (hits.length === 0) console.log("  none");
   for (const s of hits) {
     const desc = s.description.length > 140 ? `${s.description.slice(0, 139)}…` : s.description;
-    console.log(`  ${s.name}\n    ${desc}`);
+    const where = s.category ? `  (${s.path})` : "";
+    console.log(`  ${s.name}${where}\n    ${desc}`);
   }
   console.log("\nRegistry (skills.sh):");
   return skills("find", ...words);
@@ -142,18 +171,31 @@ function find(words) {
 // Extra flags (--skill <name>, as skills.sh prompts give) pass through to `skills use`.
 function use(target, extra) {
   if (!target) fail("use needs a skill name, owner/repo@skill, or a repo URL with --skill");
-  const local = target.includes("/") ? undefined : named(target);
+  const local = named(target);
   if (local) return skills("use", local, ...extra);
   if (existsSync(join(resolve(target), "SKILL.md"))) return skills("use", resolve(target), ...extra);
   if (target.includes("/")) return skills("use", target, ...extra);
   fail(`no skill named ${target} in ${library} or .claude/skills; run: node sk.mjs find ${target}`);
 }
 
-// A bare name: the library first, then a skill installed in this project's or
-// the user's .claude/skills. An installed skill the Skill tool won't take
+// A library path (security/vault) or a bare name: the library first, in any
+// category, then a skill installed in this project's or the user's
+// .claude/skills. An installed skill the Skill tool won't take
 // (disable-model-invocation) still loads here when the user asks for it.
 function named(name) {
-  const dirs = [library, join(process.cwd(), ".claude", "skills"), claudeSkills];
+  if (name.includes("/")) {
+    const dir = join(library, name);
+    return existsSync(join(dir, "SKILL.md")) ? dir : undefined;
+  }
+  const all = localSkills();
+  let hits = all.filter((s) => s.name === name);
+  // A folder name beats a frontmatter name; the frontmatter one is the fallback.
+  if (hits.length === 0) hits = all.filter((s) => s.title === name);
+  if (hits.length > 1) {
+    fail(`${hits.length} skills named ${name}: ${hits.map((s) => s.path).join(", ")}. Pick one by path`);
+  }
+  if (hits.length === 1) return hits[0].dir;
+  const dirs = [join(process.cwd(), ".claude", "skills"), claudeSkills];
   return dirs.map((d) => join(d, name)).find((d) => existsSync(join(d, "SKILL.md")));
 }
 
@@ -174,9 +216,9 @@ function remote(target, extra) {
 function resolveDir(target, extra) {
   // A folder on disk: path/to/skill
   if (existsSync(join(resolve(target), "SKILL.md"))) return resolve(target);
+  const local = named(target);
+  if (local) return local;
   if (!target.includes("/")) {
-    const local = named(target);
-    if (local) return local;
     fail(`no skill named ${target} in ${library} or .claude/skills; run: node sk.mjs find ${target}`);
   }
   const { source, skill } = remote(target, extra);
@@ -364,6 +406,76 @@ function prune(flags) {
   return 0;
 }
 
+// INDEX.md for people, grouped by category, and INDEX.json in the format sr
+// (skillfit) reads, both generated from SKILL.md frontmatter. Each is written
+// beside the target and renamed, so a reader never sees half a file.
+// --check writes nothing and exits 1 when either file is out of date.
+function index(flags) {
+  if (!existsSync(library)) fail(`no library at ${library}`);
+  const check = flags.includes("--check");
+  const all = localSkills();
+  const byName = new Map();
+  for (const s of all) byName.set(s.name, [...(byName.get(s.name) ?? []), s.path]);
+  const clashes = [...byName].filter(([, paths]) => paths.length > 1);
+  if (clashes.length > 0) {
+    fail(`folder names must be unique across categories: ${clashes.map(([, p]) => p.join(" and ")).join("; ")}`);
+  }
+  const short = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+  const groups = new Map();
+  for (const s of all) groups.set(s.category, [...(groups.get(s.category) ?? []), s]);
+  const order = [...groups.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+  const md = [
+    "# Skill index",
+    "",
+    "Generated by `sk index` from each SKILL.md's frontmatter; edit the skills, not this file.",
+    `${all.length} skills. Load one with \`/sk use <name>\`; the category is only where it lives.`,
+    "",
+    order.map((c) => `[${c || "uncategorized"}](#${c || "uncategorized"}) (${groups.get(c).length})`).join(" · "),
+  ];
+  for (const c of order) {
+    md.push("", `## ${c || "uncategorized"}`, "");
+    for (const s of groups.get(c)) {
+      const desc = short(s.description.replace(/\s+/g, " "), 200) || "(no description)";
+      md.push(`- [**${s.name}**](${s.path}/SKILL.md) ${desc}`);
+    }
+  }
+  const json = {
+    version: 1,
+    count: all.filter((s) => s.description).length,
+    skills: all
+      .filter((s) => s.description)
+      .map((s) => ({
+        name: s.title || s.name,
+        description: s.description,
+        summary: short(s.description, 140),
+        path: `${s.path}/SKILL.md`,
+        folder: s.name,
+        category: s.category,
+      })),
+  };
+  const files = [
+    [join(library, "INDEX.md"), `${md.join("\n")}\n`],
+    [join(library, "INDEX.json"), `${JSON.stringify(json, null, 1)}\n`],
+  ];
+  let stale = 0;
+  for (const [file, text] of files) {
+    const current = existsSync(file) ? readFileSync(file, "utf8") : "";
+    if (current === text) continue;
+    stale++;
+    if (check) {
+      console.log(`${file} is out of date; run: node sk.mjs index`);
+      continue;
+    }
+    writeFileSync(`${file}.tmp`, text);
+    renameSync(`${file}.tmp`, file);
+    console.log(`Wrote ${file}`);
+  }
+  const cats = order.filter((c) => c).length;
+  console.log(`${all.length} skills in ${cats} categories${stale === 0 ? ", index up to date" : ""}`);
+  return check && stale > 0 ? 1 : 0;
+}
+
 switch (command) {
   case "find":
     process.exit(find(rest));
@@ -375,8 +487,10 @@ switch (command) {
     process.exit(unlink(rest[0]));
   case "prune":
     process.exit(prune(rest));
+  case "index":
+    process.exit(index(rest));
   default:
     fail(
-      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run] [--hook]",
+      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run] [--hook] | index [--check]",
     );
 }

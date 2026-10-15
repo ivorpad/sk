@@ -25,7 +25,7 @@ Follow https://raw.githubusercontent.com/ivorpad/sk/main/INSTALL.md
 
 It installs `sk` only where it's missing, moves your other skills into one library folder after showing you the list and backing them up, and checks the result. [INSTALL.md](INSTALL.md) has the steps.
 
-By hand: `npx skills add ivorpad/sk -g`, then move your skills into `~/.skills/<name>/SKILL.md` (or the folder `SKILLS_HOME` points at). With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
+By hand: `npx skills add ivorpad/sk -g`, then move your skills into `~/.skills/<name>/SKILL.md`, or `~/.skills/<category>/<name>/SKILL.md` to group them (or the folder `SKILLS_HOME` points at). With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
 
 Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and Windows.
 
@@ -33,9 +33,10 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 
 ```
 /sk find pdf                     # local library first, then skills.sh
-/sk use pdf                      # $SKILLS_HOME/pdf
+/sk use pdf                      # $SKILLS_HOME/pdf, or $SKILLS_HOME/<category>/pdf
 /sk use anthropics/skills@pdf    # straight from the registry
 /sk prune                        # remove what loaded skills left on disk (automatic with the plugin)
+/sk index                        # write INDEX.md and INDEX.json from the library's frontmatter
 ```
 
 The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
@@ -47,11 +48,12 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | You ask for | `node sk.mjs ...` does |
 | --- | --- |
 | `find <words>` | scores each local skill's name and description against the words, then runs `npx skills find <words>` |
-| `use <name>` | `npx skills use <library>/<name>`, or the skill in `.claude/skills` when the library has none |
+| `use <name>` | `npx skills use <library>/<name>` or `<library>/<category>/<name>`, or the skill in `.claude/skills` when the library has none. Two categories with the same name: pass `<category>/<name>` |
 | `use owner/repo@skill` | `npx skills use owner/repo@skill` |
 | `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills/<session>-<name>` (the first 8 characters of the session id) without `disable-model-invocation`, so sessions loading the same skill don't share a folder. Refuses to replace a skill it didn't make |
 | `unlink <name>` | deletes the copy's `SKILL.md`, so it leaves the listing. Its other files stay at the paths the Skill tool gave it until the session ends |
 | `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), and `link` copies whose Claude Code session (`CLAUDE_PID`) has ended. The plugin's hooks run it with `--hook` |
+| `index [--check]` | writes `INDEX.md` (by category, with descriptions) and `INDEX.json` at the library root from each SKILL.md's frontmatter; `--check` exits 1 when they're stale |
 | `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |
 | any `use` with `--out` | the same, saved whole to a temp file whose path it prints |
 
