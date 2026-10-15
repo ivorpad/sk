@@ -59,6 +59,19 @@ You can run it yourself too: `node <sk folder>/scripts/sk.mjs find pdf`, where t
 
 `skills use` copies the skill's `scripts/` and `references/` to a temp folder and says where, so relative paths in the skill still resolve.
 
+## Why not just `npx skills use`
+
+`sk` calls `npx skills use` for every load, so the skill still isn't installed. What it adds:
+
+- Finding. `skills use` needs the exact `owner/repo@skill` or path. `/sk find` searches your library and skills.sh and you answer with a number, and "use the pdf skill" works because `sk` is the one description the agent always sees.
+- Short names. `/sk use pdf` means `$SKILLS_HOME/pdf`.
+- A native load on Claude Code. `skills use` gives the agent the skill as Bash output. `sk` links it, launches it through the Skill tool, then unlinks it.
+- Whole skills. `--out` writes the output to a file the agent reads in full, so a long `SKILL.md` isn't cut off in tool output.
+- Cleanup. `skills use` leaves `skills-use-*` folders in the temp directory. `sk prune` and the plugin's hooks delete them.
+- Hand-offs. A skill that calls another uninstalled skill gets it loaded the same way.
+
+If you already know the source and your agent has no Skill tool, plain `npx skills use` gets you most of the way. `sk` earns its place in finding skills, loading them natively on Claude Code and leaving nothing behind.
+
 ## What stays on disk, and when it goes
 
 On Claude Code, `link` copies the skill to `~/.claude/skills/<session>-<name>`, where `<session>` is the first 8 characters of the session id. `unlink` runs right after the Skill tool launches it and deletes only that copy's `SKILL.md`. From then on no session lists the skill, but its `scripts/`, `references/` and other files stay at the paths the skill was given. They stay until a prune removes the folder:
