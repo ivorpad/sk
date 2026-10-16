@@ -98,7 +98,7 @@ It reads every SKILL.md's frontmatter and writes `INDEX.md` (skills grouped by c
 
 ## mcp
 
-Not for you to run. `node <sk> mcp` is an MCP server Claude Code starts once the user adds it (`claude mcp add -s user lib -- node <sk> mcp`). It lists each library skill as a prompt, so typing `/vau` in the `/` menu offers `/lib:vault (MCP)`, and picking one sends you a message to call this skill with `use vault`. With `--resources` it also fills the `@` menu, so `/sk use @lib:vau` autocompletes to `@lib:vault`.
+Not for you to run. `node <sk> mcp` is an MCP server Claude Code starts once the user registers it as `lib`. If they ask you to register it, follow steps 12 to 15 of https://raw.githubusercontent.com/ivorpad/sk/main/INSTALL.md, which pick a path that survives plugin updates. It lists each library skill as a prompt, so typing `/vau` in the `/` menu offers `/lib:vault (MCP)`, and picking one sends you a message to call this skill with `use vault`. With `--resources` it also fills the `@` menu, so `/sk use @lib:vau` autocompletes to `@lib:vault`.
 
 ## Hand-offs
 

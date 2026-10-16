@@ -23,7 +23,7 @@ To also move your other skills into the library, or on any other agent, tell you
 Follow https://raw.githubusercontent.com/ivorpad/sk/main/INSTALL.md
 ```
 
-It installs `sk` only where it's missing, moves your other skills into one library folder after showing you the list and backing them up, and checks the result. [INSTALL.md](INSTALL.md) has the steps.
+It installs `sk` only where it's missing, moves your other skills into one library folder after showing you the list and backing them up, and checks the result. On Claude Code it then offers the `/` autocomplete described below. [INSTALL.md](INSTALL.md) has the steps.
 
 By hand: `npx skills add ivorpad/sk -g`, then move your skills into `~/.skills/<name>/SKILL.md`, or `~/.skills/<category>/<name>/SKILL.md` to group them (or the folder `SKILLS_HOME` points at). With no library at all, `sk` searches the [skills.sh](https://skills.sh) registry only.
 
@@ -71,7 +71,9 @@ Claude Code has no argument completion for skills: after `/sk use ` it shows the
 claude mcp add -s user lib -- node /absolute/path/to/skills/sk/scripts/sk.mjs mcp
 ```
 
-Don't name the server `sk`. Every entry carries the server name, so typing `/sk` would list the whole library under the real `/sk`. The plugin's install folder changes with each version, so point at a checkout or an `npx skills add` copy, or re-add after updating.
+Your agent can do this for you. The install prompt above has the step, and it asks before it edits your Claude Code config.
+
+Don't name the server `sk`. Every entry carries the server name, so typing `/sk` would list the whole library under the real `/sk`. A plugin install keeps a copy in `plugins/cache/sk/sk/<version>/` that moves on every update, so don't point at it. Point at the plugin's marketplace checkout, `plugins/marketplaces/sk/skills/sk/scripts/sk.mjs` inside your config folder (`~/.claude`, or `$CLAUDE_CONFIG_DIR` when set). It has no version in its path, and `/plugin marketplace update sk` updates it in place. An `npx skills add` copy or your own checkout works too.
 
 Open a new Claude Code session after adding it. `claude mcp add` writes to `$CLAUDE_CONFIG_DIR/.claude.json` when that variable is set and `~/.claude.json` when it isn't, so for a second profile put `CLAUDE_CONFIG_DIR=<its folder>` in front. Until a session has the server, `/vau` answers `Unknown command`.
 
