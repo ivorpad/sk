@@ -39,7 +39,7 @@ export function mcp(flags) {
         prompts: { listChanged: true },
         ...(withResources && { resources: { listChanged: true } }),
       },
-      serverInfo: { name: "sk", version: "0.1.0" },
+      serverInfo: { name: "sk", version: "0.2.0" },
     }),
     ping: () => ({}),
     "prompts/list": () => ({
