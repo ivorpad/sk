@@ -107,7 +107,11 @@ export function mcp(flags) {
       }
     }
   });
-  process.stdin.on("end", () => process.exit(0));
+  // Let a queued reply flush before exiting: a pipe holds about 64 KB and a big library's prompt list is larger.
+  process.stdin.on("end", () => {
+    setTimeout(() => process.exit(0), 2000).unref();
+    process.stdout.write("", () => process.exit(0));
+  });
   // Folder names only: reading 600 SKILL.md files every 5 seconds is wasteful.
   const names = () =>
     existsSync(library)
