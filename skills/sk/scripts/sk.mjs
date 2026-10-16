@@ -7,6 +7,8 @@
 //   node sk.mjs unlink <name>                   take it out of the listing, keeping its other files for the session
 //   node sk.mjs prune [--hours N] [--dry-run] [--hook]   delete temp folders and copies whose session has ended
 //   node sk.mjs index [--check]                 write INDEX.md and INDEX.json from the library's frontmatter
+//   node sk.mjs mcp [--resources]               MCP server over stdio: one prompt per library skill, so
+//                                               `/<name>` autocompletes in Claude Code's / menu
 //
 // Library: $SKILLS_HOME, else ~/.skills. One folder per skill, loose or in a
 // category folder: <library>/<name>/SKILL.md or <library>/<category>/<name>/SKILL.md.
@@ -29,6 +31,8 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
+import { library, localSkills } from "./library.mjs";
+import { mcp } from "./mcp.mjs";
 
 const args = process.argv.slice(2);
 let runner = process.env.SK_RUNNER || "npx";
@@ -43,7 +47,6 @@ const oi = args.indexOf("--out");
 const out = oi !== -1;
 if (out) args.splice(oi, 1);
 const [command, ...rest] = args;
-const library = process.env.SKILLS_HOME || join(homedir(), ".skills");
 // Claude Code watches this folder and picks up a new skill mid-session.
 const claudeSkills = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "skills");
 
@@ -88,56 +91,6 @@ function run(cliArgs, { cwd, quiet }) {
   return result.status ?? 1;
 }
 
-// A frontmatter value, including folded (>) and literal (|) blocks and a plain
-// value that starts on the next, indented line.
-function field(file, key) {
-  const text = readFileSync(file, "utf8");
-  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
-  const lines = fm.split(/\r?\n/);
-  const i = lines.findIndex((l) => l.startsWith(`${key}:`));
-  if (i === -1) return "";
-  let value = lines[i].slice(key.length + 1).trim();
-  if (value === "" || /^[>|][-+]?$/.test(value)) {
-    const block = [];
-    for (let j = i + 1; j < lines.length && /^(\s+\S|\s*$)/.test(lines[j]); j++) {
-      block.push(lines[j].trim());
-    }
-    value = block.join(" ");
-  }
-  return value.replace(/^(["'])(.*)\1$/, "$2").trim();
-}
-
-// Every skill in the library, read fresh from disk each call: a folder holding
-// SKILL.md is a skill, any other folder is a category one level down.
-// `name` is the folder name, which is what `use <name>` takes.
-function localSkills() {
-  if (!existsSync(library)) return [];
-  const found = [];
-  for (const top of folders(library)) {
-    const dir = join(library, top);
-    if (existsSync(join(dir, "SKILL.md"))) {
-      found.push({ name: top, category: "", dir });
-      continue;
-    }
-    for (const sub of folders(dir)) {
-      const inner = join(dir, sub);
-      if (existsSync(join(inner, "SKILL.md"))) found.push({ name: sub, category: top, dir: inner });
-    }
-  }
-  return found.map((s) => {
-    const file = join(s.dir, "SKILL.md");
-    const path = s.category ? `${s.category}/${s.name}` : s.name;
-    return { ...s, path, file, title: field(file, "name"), description: field(file, "description") };
-  });
-}
-
-function folders(dir) {
-  return readdirSync(dir, { withFileTypes: true })
-    .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith(".") && e.name !== "node_modules")
-    .map((e) => e.name)
-    .sort();
-}
-
 function find(words) {
   const terms = words.map((w) => w.toLowerCase()).filter(Boolean);
   if (terms.length === 0) fail("find needs words");
@@ -170,12 +123,19 @@ function find(words) {
 
 // Extra flags (--skill <name>, as skills.sh prompts give) pass through to `skills use`.
 function use(target, extra) {
+  target = alias(target);
   if (!target) fail("use needs a skill name, owner/repo@skill, or a repo URL with --skill");
   const local = named(target);
   if (local) return skills("use", local, ...extra);
   if (existsSync(join(resolve(target), "SKILL.md"))) return skills("use", resolve(target), ...extra);
   if (target.includes("/")) return skills("use", target, ...extra);
   fail(`no skill named ${target} in ${library} or .claude/skills; run: node sk.mjs find ${target}`);
+}
+
+// What Claude Code inserts when the user picks a skill from the @ menu (mcp --resources):
+// @lib:vault from a server added as `lib`, @plugin:sk:lib:vault from a plugin one.
+function alias(target) {
+  return target?.replace(/^@(plugin:[^:]+:)?[^:\s]+:(?!\/\/)/, "");
 }
 
 // A library path (security/vault) or a bare name: the library first, in any
@@ -248,6 +208,7 @@ function resolveDir(target, extra) {
 // nothing to dangle. The copy's SKILL.md drops disable-model-invocation, since
 // sk only loads a skill the user asked for.
 function link(target, extra) {
+  target = alias(target);
   if (!target) fail("link needs a skill name, owner/repo@skill, or a repo URL with --skill");
   const dir = resolveDir(target, extra);
   const name = folderName(dir.split(/[\\/]/).pop());
@@ -489,8 +450,11 @@ switch (command) {
     process.exit(prune(rest));
   case "index":
     process.exit(index(rest));
+  case "mcp":
+    mcp(rest);
+    break;
   default:
     fail(
-      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run] [--hook] | index [--check]",
+      "usage: node sk.mjs find <words...> | use|link <name | owner/repo@skill | url --skill <name>> [--out] [--runner npx|pnpm|bun] | unlink <name> | prune [--hours N] [--dry-run] [--hook] | index [--check] | mcp [--resources]",
     );
 }

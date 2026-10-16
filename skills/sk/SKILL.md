@@ -34,6 +34,7 @@ When the user confirms one ("2", "yes", "the pdf one"), run **use** on it straig
 Any of these is a request to load a skill now:
 
 - `/sk use <name>` or `/sk <name>`: a skill in the local library, in whatever category it sits. `/sk use security/vault` names the path when two categories hold the same name.
+- `/sk use @lib:<name>`: the same, picked from Claude Code's `@` menu, which `sk mcp --resources` fills with the library. Pass the target as typed; `sk.mjs` drops the `@<server>:` (or `@plugin:<plugin>:<server>:`) prefix. Any attached resource from that server is only that pointer, not the skill.
 - `/sk use owner/repo@skill`: a registry skill.
 - `/sk use path/to/skill`: a skill folder on disk.
 - `/sk https://github.com/owner/repo/tree/main/skills/name`: a repo URL pointing at one skill. A repo with several skills fails with their names; ask which, then pass `--skill <name>`.
@@ -94,6 +95,10 @@ node <sk> index --check
 ```
 
 It reads every SKILL.md's frontmatter and writes `INDEX.md` (skills grouped by category, with descriptions) and `INDEX.json` (the format `sr` reads) at the library root. `--check` writes nothing and exits 1 when either is out of date. It refuses when two categories hold a folder of the same name, since `use <name>` would be ambiguous. `find` and `use` read the folders themselves, so a stale index never hides a skill.
+
+## mcp
+
+Not for you to run. `node <sk> mcp` is an MCP server Claude Code starts once the user adds it (`claude mcp add -s user lib -- node <sk> mcp`). It lists each library skill as a prompt, so typing `/vau` in the `/` menu offers `/lib:vault (MCP)`, and picking one sends you a message to call this skill with `use vault`. With `--resources` it also fills the `@` menu, so `/sk use @lib:vau` autocompletes to `@lib:vault`.
 
 ## Hand-offs
 

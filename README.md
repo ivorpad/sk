@@ -37,6 +37,7 @@ Needs Node 18 or later, which you already have if `npx` works. macOS, Linux and 
 /sk use anthropics/skills@pdf    # straight from the registry
 /sk prune                        # remove what loaded skills left on disk (automatic with the plugin)
 /sk index                        # write INDEX.md and INDEX.json from the library's frontmatter
+/vau                             # Claude Code: pick /lib:vault (MCP) from the / menu (needs the MCP server below)
 ```
 
 The copy-paste prompts on skills.sh work too. Paste `Run npx skills use "https://github.com/owner/repo" --skill "name" and follow the generated skill instructions now.` and `sk` takes it: it saves the whole skill to a temp file, reads all of it, then follows it.
@@ -53,6 +54,7 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 | `link <target>` | Claude Code only: the library folder, or the registry skill fetched with `skills add --copy`, copied into `~/.claude/skills/<session>-<name>` (the first 8 characters of the session id) without `disable-model-invocation`, so sessions loading the same skill don't share a folder. Refuses to replace a skill it didn't make |
 | `unlink <name>` | deletes the copy's `SKILL.md`, so it leaves the listing. Its other files stay at the paths the Skill tool gave it until the session ends |
 | `prune [--hours N] [--dry-run]` | deletes `sk-*` and `skills-use-*` temp folders older than N hours (default 1), and `link` copies whose Claude Code session (`CLAUDE_PID`) has ended. The plugin's hooks run it with `--hook` |
+| `mcp [--resources]` | an MCP server on stdio listing each library skill as a prompt, for `/` autocomplete in Claude Code. `--resources` lists them for the `@` menu too, and `use` and `link` drop the `@lib:` prefix that inserts |
 | `index [--check]` | writes `INDEX.md` (by category, with descriptions) and `INDEX.json` at the library root from each SKILL.md's frontmatter; `--check` exits 1 when they're stale |
 | `use <url> --skill <name>` | `npx skills use <url> --skill <name>` |
 | any `use` with `--out` | the same, saved whole to a temp file whose path it prints |
@@ -60,6 +62,24 @@ Under the hood the agent runs `scripts/sk.mjs`, a dependency-free Node script, s
 You can run it yourself too: `node <sk folder>/scripts/sk.mjs find pdf`, where the folder is `~/.claude/skills/sk` after `npx skills add`, or `skills/sk` in the plugin's install folder.
 
 `skills use` copies the skill's `scripts/` and `references/` to a temp folder and says where, so relative paths in the skill still resolve.
+
+### Autocomplete in Claude Code
+
+Claude Code has no argument completion for skills: after `/sk use ` it shows the `argument-hint` and nothing else. It does list MCP prompts in the `/` menu, and it matches what you type anywhere in the name. So `sk mcp` serves each library skill as a prompt, and typing `/vau` offers `/lib:vault (MCP)` with the skill's description. Pick it and the agent loads the skill the way `/sk use vault` does.
+
+```
+claude mcp add -s user lib -- node /absolute/path/to/skills/sk/scripts/sk.mjs mcp
+```
+
+Don't name the server `sk`. Every entry carries the server name, so typing `/sk` would list the whole library under the real `/sk`. The plugin's install folder changes with each version, so point at a checkout or an `npx skills add` copy, or re-add after updating.
+
+Open a new Claude Code session after adding it. `claude mcp add` writes to `$CLAUDE_CONFIG_DIR/.claude.json` when that variable is set and `~/.claude.json` when it isn't, so for a second profile put `CLAUDE_CONFIG_DIR=<its folder>` in front. Until a session has the server, `/vau` answers `Unknown command`.
+
+Text typed after the name is dropped. Claude Code only passes it to arguments a prompt declares, and these declare none, so `/vault fix this pdf` loses `fix this pdf`. Say what you want in the next message.
+
+The server reads the library folders, not `INDEX.json`, and checks them every 5 seconds, so a skill added mid-session shows up without a restart. It leaves out the library's own copy of `sk`, since `/sk` is already there, and tells two skills with the same folder name apart by category (`security-vault`). That the `/` menu matches a bare `vau` against `lib:vault` is what Claude Code 2.1.301 does, not something it documents.
+
+`mcp --resources` also lists the library in the `@` menu, where `/sk use @lib:vau` offers `@lib:vault`. You have to type the `lib:`. Claude Code ranks files by their position in the file list (the best file scores 0) and resources by a separate fuzzy score with 0.15 added, so with a bare `@vault` the files that fuzzy-match sort above the skills and Tab picks the first of them. File matching needs every typed character in the path, and paths have no `:`, so `@lib:vau` returns the library only. It's off by default. While a server that lists resources is connected, Claude Code adds three resource tools to every session (`ListMcpResourcesTool`, `ReadMcpResourceTool`, `ReadMcpResourceDirTool`), and the skill names start turning up in plain `@` searches too.
 
 ## Why not just `npx skills use`
 
@@ -96,7 +116,7 @@ The temp folder a registry skill is fetched into is deleted as soon as `link` ha
 - Registry skills are other people's instructions. `sk` names the source repo before following one and asks before running any script it ships.
 - In a repo whose instructions ban `npx`, the agent passes `--runner pnpm` or `--runner bun`. `SK_RUNNER` sets a default.
 - The description says to load skills only when you ask. Agents mostly respect that, but it's a description, not a lock.
-- Tested on macOS with Claude Code 2.1.299 and skills CLI from npm. Windows support is written but untested; issues welcome.
+- Tested on macOS with Claude Code 2.1.299 and 2.1.301 (the `/` menu autocomplete on 2.1.301 only) and skills CLI from npm. Windows support is written but untested; issues welcome.
 
 ## License
 
